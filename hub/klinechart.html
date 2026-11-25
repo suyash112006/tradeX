@@ -25,7 +25,7 @@
 const SYMBOLS = LabSymbols.map((s) => ({ ticker: s.ticker, name: s.name, shortName: s.ticker, exchange: s.source === "arm" ? "Remote MT5" : s.source === "bybit" ? "BYBIT" : s.source === "mt5" ? "MT5" : s.source === "deriv" ? "DERIV" : "BINANCE",
   pricePrecision: s.digits != null ? s.digits : (["XRPUSD", "DOGEUSD", "ADAUSD"].includes(s.ticker) ? 4 : 2), volumePrecision: 2 }));
 const PERIODS = [
-  { multiplier: 1, timespan: "minute", text: "1m" }, { multiplier: 5, timespan: "minute", text: "5m" },
+  { multiplier: 1, timespan: "minute", text: "1m" }, { multiplier: 3, timespan: "minute", text: "3m" }, { multiplier: 5, timespan: "minute", text: "5m" },
   { multiplier: 15, timespan: "minute", text: "15m" }, { multiplier: 30, timespan: "minute", text: "30m" },
   { multiplier: 1, timespan: "hour", text: "1H" }, { multiplier: 4, timespan: "hour", text: "4H" },
   { multiplier: 1, timespan: "day", text: "D" },

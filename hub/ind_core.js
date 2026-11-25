@@ -43,7 +43,12 @@ async function pineAdd(ind, auto) {
   }
   ind.wait = false;
   busy[ind.key] = true; indChanged();
-  if (ind.kind === "native") { const r = await ask("native:add", { type: ind.type, inputs: ind.inputs }); onPineResult({ key: ind.key, ...r }); return; }
+  if (ind.kind === "native") {
+    if (ind.type === "volume") {
+      try { localStorage.removeItem("tradex_volume_removed"); } catch (_) {}
+    }
+    const r = await ask("native:add", { type: ind.type, inputs: ind.inputs }); onPineResult({ key: ind.key, ...r }); return;
+  }
   const w = frameWin(); if (!w) return;
   w.postMessage({ cmd: "pine:add", key: ind.key, source: prepared(ind), inputs: ind.inputs, props: ind.props }, location.origin);
 }
@@ -60,6 +65,9 @@ function onPineResult(m) {
 }
 // Removed from Vela's own legend (trash icon): forget it here too, so it is not re-added on reload.
 function onLegendRemoved(id) {
+  if (id === "volume" || (typeof id === "string" && id.toLowerCase().includes("volume"))) {
+    try { localStorage.setItem("tradex_volume_removed", "1"); } catch (_) {}
+  }
   const key = Object.keys(liveIds).find((k) => liveIds[k] === id); if (!key) return;
   delete liveIds[key]; INDS = INDS.filter((x) => x.key !== key); saveInds(); indChanged();
 }

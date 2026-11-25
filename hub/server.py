@@ -18,7 +18,8 @@ Client -> server: {"source": "mt5"|"binance"|"deriv"|"arm"|"bybit", "symbol": "X
 Server -> client: {"type": "history", "bars": [...]}, then {"type": "bar", "bar": {...}, "sent": epoch_ms}
                   {"type": "error", "msg": "..."}
 """
-import asyncio, json, subprocess, threading, time, urllib.request, functools, os, sys
+import asyncio, json, subprocess, threading, time, urllib.request, functools, os, sys, re
+from pathlib import Path
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import websockets
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,8 +47,8 @@ REMOTE_SSH_HOST = os.environ.get("REMOTE_MT5_SSH_HOST", "").strip()   # an alias
 REMOTE_RESTART_CMD = os.environ.get("REMOTE_MT5_RESTART_CMD", "").strip()  # optional command run over SSH by the Restart button
 REMOTE_ON = bool(REMOTE_SSH_HOST)
 CACHE_DIR = os.path.join(HERE, ".cache")
-TF_SEC = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
-BINANCE_TF = {"M1": "1m", "M5": "5m", "M15": "15m", "M30": "30m", "H1": "1h", "H4": "4h", "D1": "1d"}
+TF_SEC = {"M1": 60, "M3": 180, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400, "W1": 604800}
+BINANCE_TF = {"M1": "1m", "M3": "3m", "M5": "5m", "M15": "15m", "M30": "30m", "H1": "1h", "H4": "4h", "D1": "1d", "W1": "1w"}
 BINANCE_SYM = {"XAUUSD": "PAXGUSDT"}  # gold token; any other XXXUSD maps to XXXUSDT
 
 def bsym_of(symbol):
@@ -368,7 +369,7 @@ async def stream_binance(ws, symbol, tf):
 # Suffix .MARK / .INDEX = mark-price / index-price candles (linear and inverse only).
 BYBIT_REST = "https://api.bybit.com"
 BYBIT_WS = "wss://stream.bybit.com/v5/public/"
-BYBIT_TF = {"M1": "1", "M5": "5", "M15": "15", "M30": "30", "H1": "60", "H4": "240", "D1": "D"}
+BYBIT_TF = {"M1": "1", "M3": "3", "M5": "5", "M15": "15", "M30": "30", "H1": "60", "H4": "240", "D1": "D", "W1": "W"}
 BYBIT_METAL = ("XAU", "XAG", "XPT", "XPD", "PAXG")
 bybit_symbols_cache = []
 
@@ -553,7 +554,7 @@ def health_report():
 
 # ---------------- Deriv (free, no login) ----------------
 DERIV_URL = "wss://api.derivws.com/trading/v1/options/ws/public"
-DERIV_GRAN = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
+DERIV_GRAN = {"M1": 60, "M3": 180, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400, "W1": 86400}
 DERIV_GROUP = {"forex": "forex", "commodities": "commodity", "cryptocurrency": "crypto", "indices": "indices"}
 deriv_symbols_cache = []
 
@@ -916,6 +917,29 @@ class LabHandler(SimpleHTTPRequestHandler):
             return self._json(feed_status(), 200)
         if self.path.startswith("/api/instruments"):
             return self._json(build_instruments(), 200)
+        if self.path.startswith("/api/drawings"):
+            from urllib.parse import urlparse, parse_qs
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            sym = re.sub(r'[^a-zA-Z0-9_\-\.]', '', q.get("symbol", "default"))
+            drawings_dir = Path(__file__).resolve().parent / "data" / "drawings"
+            drawings_file = drawings_dir / f"{sym}.json"
+            if drawings_file.is_file():
+                try:
+                    with open(drawings_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    return self._json(data, 200)
+                except Exception as e:
+                    return self._json({"error": str(e)}, 500)
+            return self._json({"drawings": [], "toolDefaults": {}}, 200)
+        if self.path.startswith("/api/templates"):
+            tpl_file = Path(__file__).resolve().parent / "data" / "templates.json"
+            if tpl_file.is_file():
+                try:
+                    with open(tpl_file, "r", encoding="utf-8") as f:
+                        return self._json(json.load(f), 200)
+                except Exception as e:
+                    return self._json({"error": str(e)}, 500)
+            return self._json({}, 200)
         if self.path.startswith("/api/health"):
             return self._json(health_report(), 200)
         if self.path.startswith("/api/orderflow/delta"):
@@ -987,9 +1011,9 @@ class LabHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        """Only /api/restart (Restart button) and /api/logs/journal (log panel).
+        """Endpoints: /api/restart, /api/logs/journal, /api/drawings, and /api/templates (persistent templates).
         Same-origin JSON only, so another web page open in the browser cannot act through this local server."""
-        if not self.path.startswith(("/api/restart", "/api/logs/journal")):
+        if not self.path.startswith(("/api/restart", "/api/logs/journal", "/api/drawings", "/api/templates")):
             return self._json({"error": "not found"}, 404)
         origin = self.headers.get("Origin", "")
         if origin and origin not in (f"http://localhost:{HTTP_PORT}", f"http://127.0.0.1:{HTTP_PORT}"):
@@ -997,8 +1021,34 @@ class LabHandler(SimpleHTTPRequestHandler):
         if "application/json" not in self.headers.get("Content-Type", ""):
             return self._json({"error": "JSON only"}, 415)
         n = int(self.headers.get("Content-Length") or 0)
-        if n > 300000:
+        if n > 1000000:
             return self._json({"error": "too large"}, 413)
+        if self.path.startswith("/api/drawings"):
+            from urllib.parse import urlparse, parse_qs
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            sym = re.sub(r'[^a-zA-Z0-9_\-\.]', '', q.get("symbol", "default"))
+            raw = self.rfile.read(n)
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                drawings_dir = Path(__file__).resolve().parent / "data" / "drawings"
+                drawings_dir.mkdir(parents=True, exist_ok=True)
+                drawings_file = drawings_dir / f"{sym}.json"
+                with open(drawings_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                return self._json({"ok": True, "saved": sym}, 200)
+            except Exception as e:
+                return self._json({"error": str(e)}, 400)
+        if self.path.startswith("/api/templates"):
+            raw = self.rfile.read(n)
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                tpl_file = Path(__file__).resolve().parent / "data" / "templates.json"
+                tpl_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(tpl_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                return self._json({"ok": True}, 200)
+            except Exception as e:
+                return self._json({"error": str(e)}, 400)
         if self.path.startswith("/api/logs/journal"):
             self.rfile.read(n)
             return self._json({"ok": True}, 200)
@@ -1030,7 +1080,9 @@ class LabHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # Pages and scripts change often while we build: never let the browser serve a stale copy.
         if not self.path.startswith("/api/"):
-            self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         super().end_headers()
 
     def log_message(self, *a):

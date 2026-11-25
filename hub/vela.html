@@ -1,23 +1,383 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>TradeX - Vela engine</title>
 <style>
-  html,body{margin:0;height:100%;background:#0f161d;color:#d6dee5;font:13px system-ui,Segoe UI,sans-serif}
-  #top{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid #26333f;height:31px;box-sizing:border-box}
-  #top button,#top select{background:#16212b;color:#d6dee5;border:1px solid #2b3946;padding:3px 8px;cursor:pointer}
-  #chart{position:absolute;top:31px;left:0;right:0;bottom:0}
-  /* Vela 0.9.3 bug (found 2026-11-12, also on the pre-change page): once the mouse moves over an open toolbar menu, the
-     chart canvas paints above the menu layer and takes the click, so no menu entry (chart style, etc.) can be picked.
-     Keep the menu layer above the chart; the layer itself lets clicks through where it has no menu. */
+  html,body{margin:0;height:100%;background:#0f161d;color:#d6dee5;font:13px system-ui,Segoe UI,sans-serif;overflow:hidden}
+  #top{display:none !important;border:none !important;height:0 !important;padding:0 !important}
+  #chart{position:absolute;top:0 !important;left:0;right:0;bottom:0;border:none !important;outline:none !important}
+  .vela-dtb, .vela-ws-toolbar { border-right:none !important; border:none !important; outline:none !important; }
+  .vela-ws-grid, .vela-workspace, .vela-ws-main { border:none !important; outline:none !important; background:transparent !important; }
+  .vela-widget-topbar { display:none !important; border:none !important; }
+
+  /* Eliminate active cell outline/ring (Vela's .vela-cell[data-active='1']::after) and any top/left borders */
+  .vela-cell::after, .vela-cell::before,
+  .vela-cell[data-active='1']::after, .vela-cell[data-active='1']::before,
+  .vela-ws-grid .vela-cell[data-active='1']::after,
+  .vela-ws-grid[data-multi='1'] .vela-cell[data-active='1']::after {
+    display: none !important;
+    content: none !important;
+    border: none !important;
+    outline: none !important;
+  }
+  .vela-cell, .vela-cell:focus, .vela-cell:focus-visible,
+  .vela-chart-box, .vela-chart-box:focus,
+  .vela-pane, .vela-pane:focus,
+  .vela-pane-surface, .vela-pane-surface:focus,
+  canvas, canvas:focus, canvas:focus-visible,
+  #chart, #chart:focus, #chart:focus-visible,
+  .vela-workspace, .vela-workspace:focus,
+  .vela-ws-main, .vela-ws-main:focus,
+  .vela-ws-grid, .vela-ws-grid:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Vela 0.9.3 menu layer fix */
   .vela-ui-layer { z-index: 30; pointer-events: none; }
   .vela-ui-layer > * { pointer-events: auto; }
+
+  /* Completely remove any tooltip bubble / icon tag from drawing toolbar */
+  div[style*="z-index:27"],
+  div[style*="z-index: 27"],
+  div[style*="z-index:27;"],
+  div[style*="z-index: 27;"],
+  .vela-tip {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* Drawing properties floating toolbar (.vela-dpop) matching .tx-favbar 1:1 */
+  @keyframes velaDpopPopIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.96) translateY(-4px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .vela-dpop {
+    position: absolute !important;
+    z-index: 29 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    padding: 4px 6px !important;
+    border-radius: 9px !important;
+    background: var(--panel, #1b1a17) !important;
+    border: 1px solid var(--line, #2f2c27) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,.6) !important;
+    user-select: none !important;
+    touch-action: none !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+    animation: velaDpopPopIn 0.14s cubic-bezier(0, 0, 0.2, 1) !important;
+    transition: opacity 0.12s ease !important;
+  }
+  .vela-dpop > div {
+    display: flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    height: auto !important;
+  }
+  .vela-dpop-btn,
+  .tradex-dpop-btn,
+  .vela-dpop button,
+  .vela-dpop [role="combobox"],
+  .vela-dpop [role="button"],
+  .vela-dpop .vela-select-trigger {
+    height: 32px !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    background: transparent !important;
+    color: var(--dim, #958c7e) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+    transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease !important;
+    box-sizing: border-box !important;
+    font-size: 12px !important;
+  }
+  /* Regular single-icon buttons */
+  .vela-dpop-btn:not(:has(span)),
+  .tradex-dpop-btn,
+  .vela-dpop button:not(:has(span)):not([role="combobox"]):not(.vela-select-trigger) {
+    width: 32px !important;
+  }
+  /* Dropdowns with text/previews have clean compact spacing */
+  .vela-dpop-btn:has(span),
+  .vela-dpop [role="combobox"],
+  .vela-dpop .vela-select-trigger {
+    width: auto !important;
+    min-width: 32px !important;
+    padding: 0 6px !important;
+    gap: 4px !important;
+  }
+  .vela-dpop-btn:hover,
+  .tradex-dpop-btn:hover,
+  .vela-dpop button:hover,
+  .vela-dpop [role="combobox"]:hover,
+  .vela-dpop [role="button"]:hover,
+  .vela-dpop .vela-select-trigger:hover {
+    background: var(--raised, #24221e) !important;
+    color: var(--text, #e6dfd2) !important;
+  }
+  .vela-dpop-btn:active,
+  .tradex-dpop-btn:active,
+  .vela-dpop button:active,
+  .vela-dpop [role="combobox"]:active,
+  .vela-dpop .vela-select-trigger:active {
+    transform: scale(0.92) !important;
+  }
+  .vela-dpop-btn.on,
+  .tradex-dpop-btn.on,
+  .vela-dpop [data-active="1"] {
+    background: var(--raised, #24221e) !important;
+    color: var(--text, #e6dfd2) !important;
+  }
+  .vela-dpop svg {
+    width: 18px !important;
+    height: 18px !important;
+    display: block !important;
+  }
+  /* Sub-elements inside dropdowns and color buttons align cleanly with all other icons */
+  .vela-dpop-btn span {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+  }
+  .vela-dpop-btn span svg,
+  .vela-dpop [role="combobox"] span svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  .vela-dpop-grip {
+    width: 14px !important;
+    height: 32px !important;
+    cursor: grab !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: var(--faint, #5e584f) !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+    transition: color 0.12s ease !important;
+  }
+  .vela-dpop-grip:hover {
+    color: var(--dim, #958c7e) !important;
+  }
+  .vela-dpop-grip svg {
+    width: 6px !important;
+    height: 14px !important;
+  }
+  .vela-dpop-grip:active { cursor: grabbing !important; }
+  /* Thin vertical divider between groups */
+  .vela-dpop hr, .vela-dpop-sep {
+    display: none !important;
+  }
+  .vela-dpop div[style*="width: 1px"], .vela-dpop div[style*="width:1px"] {
+    width: 1px !important;
+    height: 18px !important;
+    background: var(--line, #2f2c27) !important;
+    margin: 0 3px !important;
+    display: flex !important;
+    flex-shrink: 0 !important;
+  }
+  /* Completely hide tooltips / tags over drawing toolbar */
+  .vela-tooltip,
+  div[style*="z-index: 27"],
+  div[style*="z-index:27"] {
+    display: none !important;
+  }
+  .vela-dialog, .vela-menu { background: var(--panel, #1b1a17) !important; border: 1px solid var(--line, #2f2c27) !important; color: var(--text, #e6dfd2) !important; }
+
+  /* Drawing templates & settings style menu (.vela-dsp-menu) aligned to website dark theme */
+  .vela-dsp-menu {
+    background: #141414 !important;
+    border: 1px solid #282828 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.5) !important;
+    color: #d4d4d4 !important;
+    font: 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    min-width: 200px !important;
+    max-width: 260px !important;
+    max-height: 340px !important;
+    padding: 5px !important;
+    gap: 2px !important;
+    user-select: none !important;
+    z-index: 6000 !important;
+  }
+  .vela-dsp-mh {
+    padding: 6px 8px 3px !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    color: #666666 !important;
+  }
+  .vela-dsp-mi {
+    height: 30px !important;
+    padding: 0 6px 0 8px !important;
+    border-radius: 5px !important;
+    color: #cccccc !important;
+    font-size: 12px !important;
+    gap: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    transition: background 0.1s ease, color 0.1s ease !important;
+    box-sizing: border-box !important;
+    cursor: pointer !important;
+  }
+  .vela-dsp-mi:hover,
+  .vela-dsp-mi:focus-visible {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+  }
+  .vela-dsp-mi[data-current] {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+  }
+  .vela-dsp-mi > .vela-dsp-mi-t {
+    font-size: 12px !important;
+  }
+  .vela-dsp-mi-dot {
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 3px !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  }
+  .vela-dsp-mi-x {
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 4px !important;
+    color: #666666 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background 0.1s, color 0.1s !important;
+    cursor: pointer !important;
+  }
+  .vela-dsp-mi-x:hover {
+    background: rgba(242, 54, 69, 0.2) !important;
+    color: #f23645 !important;
+  }
+  .vela-dsp-msep {
+    height: 1px !important;
+    background: #282828 !important;
+    margin: 4px 0 !important;
+  }
+  .vela-dsp-mname {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 4px !important;
+  }
+  .vela-dsp-mname > input {
+    height: 26px !important;
+    padding: 0 8px !important;
+    border-radius: 4px !important;
+    border: 1px solid #333333 !important;
+    background: #0d0d0d !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    outline: none !important;
+  }
+  .vela-dsp-mname > input:focus {
+    border-color: #666666 !important;
+  }
+  .vela-dsp-mname button.tradex-save-btn,
+  .vela-dsp-mname button:not(.tradex-cancel-btn) {
+    height: 26px !important;
+    padding: 0 11px !important;
+    border-radius: 4px !important;
+    background: #2b2b2b !important;
+    border: 1px solid #444444 !important;
+    color: #ffffff !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: background 0.1s, border-color 0.1s !important;
+  }
+  .vela-dsp-mname button.tradex-save-btn:hover,
+  .vela-dsp-mname button:not(.tradex-cancel-btn):hover {
+    background: #383838 !important;
+    border-color: #666666 !important;
+    color: #ffffff !important;
+  }
+  .vela-dsp-mname button.tradex-cancel-btn {
+    height: 26px !important;
+    width: 26px !important;
+    padding: 0 !important;
+    border-radius: 4px !important;
+    background: #181818 !important;
+    border: 1px solid #333333 !important;
+    color: #888888 !important;
+    font-size: 12px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: background 0.1s, color 0.1s, border-color 0.1s !important;
+  }
+  .vela-dsp-mname button.tradex-cancel-btn:hover {
+    background: #282828 !important;
+    color: #ffffff !important;
+    border-color: #444444 !important;
+  }
+  .vela-dsp-style {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    height: 26px !important;
+    padding: 0 8px !important;
+    border-radius: 5px !important;
+    border: 1px solid #333 !important;
+    background: #1a1a1a !important;
+    color: #ccc !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    margin-left: 8px !important;
+    transition: background 0.1s, color 0.1s !important;
+  }
+  .vela-dsp-style:hover {
+    background: #242424 !important;
+    color: #fff !important;
+  }
+  .vela-attribution .vela-attr-wordmark { display: none !important; }
+  .vela-attribution .vela-attr-symbol svg { display: none !important; }
+  .vela-attribution .vela-attr-symbol::before {
+    content: "";
+    display: block;
+    width: 72px;
+    height: 46px;
+    opacity: 0.5;
+    background: url("logo.png") center/contain no-repeat;
+  }
 </style></head><body>
 <div id="top"><b>TradeX</b> <span style="color:#93a2af">Vela engine</span>
   <select id="layout"><option value="">1 chart</option><option value="2h">2 side by side</option><option value="2v">2 stacked</option><option value="4">4 charts</option><option value="8">8 charts</option></select>
   <span style="color:#93a2af">Tips: type a letter for symbol search, a digit for timeframe, ? for all shortcuts. Drag pane borders to resize.</span>
   <button id="auto">Code trendline</button></div>
 <div id="chart"></div>
-<script src="vela.bundle.js"></script>
-<script src="theme.js"></script>
+<script src="vela.bundle.js?v=20261125_185"></script>
+<script src="theme.js?v=20261125_135"></script>
+<script src="hub_settings_ui.js?v=20261125_135"></script>
 <script src="lab.js"></script>
 <script src="orderflow_delta.js"></script>
 <script src="orderflow_profile.js"></script>
@@ -25,7 +385,10 @@
 <script src="orderflow_footprint_draw.js"></script>
 <script src="orderflow_svp_type.js"></script>
 <script src="orderflow_tpo_type.js"></script>
-<script src="drawing_favbar.js"></script>
+<script src="drawing_favbar.js?v=20261125_170"></script>
+<script src="drawing_templates.js?v=20261125_135"></script>
+<script src="chartstyle_favbar.js?v=20261125_135"></script>
+<script src="chart_templates.js?v=20261125_135"></script>
 <script src="orderflow_autofit.js"></script>
 <script>
 let lastBars = [];
@@ -98,59 +461,329 @@ if (LabEmbedded && VelaLab.registerWidgetAction) {
 // ---- Theme (TradeX settings) ----
 // hexA() comes from theme.js
 function velaTheme() { const t = HubTheme; return { background: t.bg, textColor: t.text, gridColor: t.grid, borderColor: t.line, upColor: t.up, downColor: t.down, fontFamily: t.font }; }
-// Candle colours have one home: the hub's Settings panel. Inside the hub, Vela's own dialog hides its colour rows.
-const CANDLE_COLOUR_ROWS = ["symbol.style.candles.body", "symbol.style.candles.borders", "symbol.style.candles.wick", "symbol.style.bars.up-color", "symbol.style.bars.down-color"];
+// Candle colours sync with the hub's Settings panel and persist across reloads.
+let _applyingTheme = false;
 function guardCandleColours(chart) {
-  if (!LabEmbedded || chart.hubGuarded) return;
+  if (chart.hubGuarded) return;
   chart.hubGuarded = true;
-  try { chart.renderer.setSettingsVisibility({ hidden: CANDLE_COLOUR_ROWS }); } catch (e) { console.warn("settings rows", e); }
-  // Vela's "Reset defaults" must not pull the candles away from the hub's colours.
-  try { chart.renderer.onConfigChanged(() => { const c = chart.renderer.getConfig().candles; if (c && (c.upColor !== HubTheme.up || c.downColor !== HubTheme.down)) colorChart(chart); }); } catch (e) { console.warn("config guard", e); }
+  try {
+    chart.renderer.onConfigChanged(() => {
+      if (_applyingTheme) return;
+      const cfg = chart.renderer.getConfig();
+      if (cfg && cfg.candles) {
+        const c = cfg.candles;
+        if (c.upColor !== HubTheme.up || c.downColor !== HubTheme.down) {
+          const cur = HubSettingsLoad();
+          cur.overrides = cur.overrides || {};
+          cur.overrides.up = c.upColor;
+          cur.overrides.down = c.downColor;
+          HubSettingsSave(cur);
+          HubThemeApply();
+        }
+      }
+      try {
+        const userCfg = {
+          candles: cfg.candles,
+          bars: cfg.bars,
+          line: cfg.line,
+          area: cfg.area,
+          baseline: cfg.baseline,
+          series: cfg.series,
+          animations: cfg.animations,
+          layout: cfg.layout,
+          panes: cfg.panes,
+          priceScale: cfg.priceScale,
+          timeScale: cfg.timeScale,
+          margins: cfg.margins,
+          crosshair: cfg.crosshair,
+          grid: cfg.grid,
+          chartTypes: cfg.chartTypes
+        };
+        localStorage.setItem("tradex_chart_config", JSON.stringify(userCfg));
+      } catch (_) {}
+    });
+  } catch (e) { console.warn("config guard", e); }
 }
 function colorChart(chart) {
   const t = HubTheme;
   guardCandleColours(chart);
+  let savedCfg = {};
+  try { savedCfg = JSON.parse(localStorage.getItem("tradex_chart_config") || "{}"); } catch (_) {}
+  _applyingTheme = true;
   try {
     chart.renderer.applyConfig({
-      layout: { background: t.bg, textColor: t.text, fontFamily: t.font },
-      grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } },
-      crosshair: { color: t.dim, labelBackground: t.raised },
-      priceScale: { borderColor: t.line }, panes: { separatorColor: t.line },
-      candles: { upColor: t.up, downColor: t.down, borderUpColor: t.up, borderDownColor: t.down, wickUpColor: t.up, wickDownColor: t.down },
-      bars: { upColor: t.up, downColor: t.down },
-      line: { color: t.accent }, area: { lineColor: t.accent, topColor: hexA(t.accent, 0.28), bottomColor: hexA(t.accent, 0.02) },
-      baseline: { topLineColor: t.up, bottomLineColor: t.down, topFillColor: hexA(t.up, 0.25), bottomFillColor: hexA(t.down, 0.25) },
+      layout: { background: t.bg, textColor: t.text, fontFamily: t.font, ...(savedCfg.layout || {}) },
+      grid: {
+        vertLines: { color: t.grid, ...(savedCfg.grid && savedCfg.grid.vertLines ? savedCfg.grid.vertLines : {}) },
+        horzLines: { color: t.grid, ...(savedCfg.grid && savedCfg.grid.horzLines ? savedCfg.grid.horzLines : {}) }
+      },
+      crosshair: { color: t.dim, labelBackground: t.raised, ...(savedCfg.crosshair || {}) },
+      priceScale: { borderColor: t.line, ...(savedCfg.priceScale || {}) },
+      panes: { separatorColor: t.line, ...(savedCfg.panes || {}) },
+      candles: { upColor: t.up, downColor: t.down, borderUpColor: t.up, borderDownColor: t.down, wickUpColor: t.up, wickDownColor: t.down, ...(savedCfg.candles || {}) },
+      bars: { upColor: t.up, downColor: t.down, ...(savedCfg.bars || {}) },
+      line: { color: t.accent, ...(savedCfg.line || {}) },
+      area: { lineColor: t.accent, topColor: hexA(t.accent, 0.28), bottomColor: hexA(t.accent, 0.02), ...(savedCfg.area || {}) },
+      baseline: { topLineColor: t.up, bottomLineColor: t.down, topFillColor: hexA(t.up, 0.25), bottomFillColor: hexA(t.down, 0.25), ...(savedCfg.baseline || {}) },
       trades: { longColor: t.up, shortColor: t.down },
+      ...(savedCfg.series ? { series: savedCfg.series } : {}),
+      ...(savedCfg.animations ? { animations: savedCfg.animations } : {}),
+      ...(savedCfg.timeScale ? { timeScale: savedCfg.timeScale } : {}),
+      ...(savedCfg.chartTypes ? { chartTypes: savedCfg.chartTypes } : {}),
+      margins: { top: 8, bottom: 8, right: 2, ...(savedCfg.margins && savedCfg.margins.right !== 10 ? savedCfg.margins : { right: 2 }) }
     });
-  } catch (e) { console.warn("theme config", e); }
+  } catch (e) { console.warn("theme config", e); } finally {
+    _applyingTheme = false;
+  }
   try { // built-in volume keeps its own colours: recolour it only if it is on the chart
-    if (chart.presentNativeIndicators().includes("volume")) chart.addNativeIndicator("volume").setInputs({ upColor: t.up + "6b", downColor: t.down + "6b" });
+    const volRemoved = localStorage.getItem("tradex_volume_removed") === "1";
+    if (!volRemoved && chart.presentNativeIndicators && chart.presentNativeIndicators().includes("volume")) {
+      chart.addNativeIndicator("volume").setInputs({ upColor: t.up + "6b", downColor: t.down + "6b" });
+    }
   } catch (e) { console.warn("volume colours", e); }
 }
 function applyTheme() {
   try { ws.setTheme(velaTheme()); } catch (e) { console.warn("setTheme", e); }
   (ws.cells ? ws.cells() : [ws.active]).forEach((c) => c && c.chart && colorChart(c.chart));
+  try {
+    const hs = JSON.parse(localStorage.getItem("tradex_chart_host_settings") || "null");
+    if (hs && typeof hs === "object") {
+      const cell = ws && (ws.active || (ws.cells && ws.cells()[0]));
+      if (cell) {
+        if (typeof hs.watermark === "boolean" && cell.setWatermarkVisible) cell.setWatermarkVisible(hs.watermark);
+        if (typeof hs.replayWatermark === "boolean" && cell.setReplayWatermarkVisible) cell.setReplayWatermarkVisible(hs.replayWatermark);
+        if (hs.statusline && cell.setStatuslinePart) {
+          for (const [k, v] of Object.entries(hs.statusline)) cell.setStatuslinePart(k, !!v);
+        }
+        if (typeof hs.indicatorTitles === "boolean" && cell.setIndicatorTitlesVisible) cell.setIndicatorTitlesVisible(hs.indicatorTitles);
+        if (typeof hs.indicatorValues === "boolean" && cell.setIndicatorValuesVisible) cell.setIndicatorValuesVisible(hs.indicatorValues);
+      }
+    }
+  } catch (_) {}
 }
-const VELA_TF = { M1: "1", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "1D" };
+const VELA_TF = { M1: "1", M3: "3", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "1D", W1: "1W", MN: "1M" };
+// Persistent drawings & tool defaults per symbol (localStorage + backend disk storage)
+let lastSavedJSON = "";
+let saveTimer = null;
+
+function saveDrawings(sym) {
+  sym = sym || window.LabDefaultSymbol;
+  if (!sym || !ws || !ws.chart || !ws.chart.drawings || !ws.chart.drawings.toJSON) return;
+  try {
+    const data = ws.chart.drawings.toJSON();
+    const toolDefaults = (ws.chart.drawings.toolDefaults && ws.chart.drawings.toolDefaults()) || {};
+    const toolTemplates = (ws.chart.drawings.toolTemplates && ws.chart.drawings.toolTemplates()) || (window.TradeXDrawingTemplates && window.TradeXDrawingTemplates.load()) || {};
+    const payloadStr = JSON.stringify({ drawings: data, toolDefaults, toolTemplates });
+    if (payloadStr === lastSavedJSON) return;
+    lastSavedJSON = payloadStr;
+
+    // 1. Save to localStorage immediately
+    if (data && data.drawings && data.drawings.length) {
+      localStorage.setItem("tradex_drawings_" + sym, JSON.stringify(data));
+    } else {
+      localStorage.removeItem("tradex_drawings_" + sym);
+    }
+    if (Object.keys(toolDefaults).length) {
+      localStorage.setItem("tradex_tool_defaults", JSON.stringify(toolDefaults));
+    }
+    if (Object.keys(toolTemplates).length) {
+      localStorage.setItem("tradex_tool_templates", JSON.stringify(toolTemplates));
+    }
+
+    // 2. Save to backend disk (/api/drawings) with keepalive: true so browser finishes save even on page refresh
+    try {
+      fetch("/api/drawings?symbol=" + encodeURIComponent(sym), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payloadStr,
+        keepalive: true
+      }).catch(() => {});
+    } catch (_) {}
+  } catch (e) { console.warn("save drawings", e); }
+}
+
+function scheduleSave(sym) {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveDrawings(sym), 80);
+}
+
+function restoreDrawings(sym) {
+  sym = sym || window.LabDefaultSymbol;
+  if (!sym || !ws || !ws.chart || !ws.chart.drawings) return;
+  const d = ws.chart.drawings;
+
+  // 1. Instant synchronous restore from localStorage
+  try {
+    const td = localStorage.getItem("tradex_tool_defaults");
+    if (td && d.setToolDefaults) d.setToolDefaults(JSON.parse(td));
+    const tt = localStorage.getItem("tradex_tool_templates");
+    if (tt && d.setToolTemplates) d.setToolTemplates(JSON.parse(tt));
+    const raw = localStorage.getItem("tradex_drawings_" + sym);
+    if (raw && d.fromJSON) {
+      const data = JSON.parse(raw);
+      d.fromJSON(data);
+      lastSavedJSON = JSON.stringify({ drawings: data, toolDefaults: (d.toolDefaults && d.toolDefaults()) || {}, toolTemplates: (d.toolTemplates && d.toolTemplates()) || {} });
+    }
+  } catch (e) { console.warn("restore local drawings", e); }
+
+  // 2. Check backend storage to ensure latest server state is synced
+  try {
+    fetch("/api/drawings?symbol=" + encodeURIComponent(sym))
+      .then((r) => r.json())
+      .then((res) => {
+        if (!res) return;
+        if (res.toolDefaults && d.setToolDefaults && Object.keys(res.toolDefaults).length) {
+          d.setToolDefaults(res.toolDefaults);
+        }
+        if (res.toolTemplates && d.setToolTemplates && Object.keys(res.toolTemplates).length) {
+          d.setToolTemplates(res.toolTemplates);
+        }
+        if (res.drawings && res.drawings.drawings && res.drawings.drawings.length) {
+          if (!d.all().length) {
+            d.fromJSON(res.drawings);
+          }
+          lastSavedJSON = JSON.stringify({ drawings: res.drawings, toolDefaults: res.toolDefaults || {}, toolTemplates: res.toolTemplates || {} });
+        }
+      })
+      .catch(() => {});
+  } catch (_) {}
+}
+
+// Event hooks to guarantee drawing settings are saved BEFORE any refresh
+window.addEventListener("beforeunload", () => saveDrawings());
+window.addEventListener("pagehide", () => saveDrawings());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveDrawings();
+});
+
+// Capture any user edits in the floating bar (.vela-dpop), settings dialog, or drawing canvas
+document.addEventListener("pointerup", (e) => {
+  if (e.target && e.target.closest && e.target.closest(".vela-dpop, .vela-dialog, .vela-menu, canvas, .tx-favbar")) {
+    scheduleSave();
+  }
+}, true);
+
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.closest && e.target.closest(".vela-dpop, .vela-dialog, .vela-menu")) {
+    scheduleSave();
+  }
+}, true);
+
+document.addEventListener("input", (e) => {
+  if (e.target && e.target.closest && e.target.closest(".vela-dpop, .vela-dialog")) {
+    scheduleSave();
+  }
+}, true);
+
+// Periodic check: every 1 second, if serialized drawings changed, save automatically
+setInterval(() => {
+  try {
+    if (ws && ws.chart && ws.chart.drawings && ws.chart.drawings.toJSON) {
+      const data = ws.chart.drawings.toJSON();
+      const td = (ws.chart.drawings.toolDefaults && ws.chart.drawings.toolDefaults()) || {};
+      const cur = JSON.stringify({ drawings: data, toolDefaults: td });
+      if (cur !== lastSavedJSON) {
+        saveDrawings();
+      }
+    }
+  } catch (_) {}
+}, 1000);
+
 function build(layout) {
   const host = document.getElementById("chart");
   if (ws && ws.destroy) ws.destroy();
   host.innerHTML = "";
+  const volumeDisabled = localStorage.getItem("tradex_volume_removed") === "1";
   ws = new VelaLab.VelaWorkspace(host, {
     // "1" (not false) so the layout can change in place later; top-level symbol/timeframe are every cell's default.
     layout: layout || "1", symbol: "lab:" + LabDefaultSymbol, timeframe: VELA_TF[LabDefaultTF], live: true,
+    volume: !volumeDisabled,
+    chart: { volume: !volumeDisabled },
+    chartDefaults: { volume: !volumeDisabled },
     // History depth. Vela's default is 500 candles and it does NOT load more when you scroll left, so 1m-15m charts
     // only reached back a few days. More: chart settings > Advanced > Bars to fetch, or the 3M/6M/1Y buttons (2026-11-13).
-    bars: 10000,
+    bars: 1000,
     theme: velaTheme(), upColor: HubTheme.up, downColor: HubTheme.down,
     providers: { lab: () => provider }, persist: false,
     // Inside the TradeX wrapper, symbol / timeframe / layout live in the wrapper's bar only (no duplicate controls).
-    ...(LabEmbedded ? { topbar: { left: ["style", "indicators", "undo-redo"] } } : {}),
+    ...(LabEmbedded ? { topbar: false } : {}),
     // Pine Script runs in its own worker per chart (PineTS via @luxalgo/vela-pinets), so heavy scripts never freeze the chart.
     engines: { pine: () => new HubPineEngine() },
   });
+  window.ws = ws;
+  if (volumeDisabled) {
+    (ws.cells ? ws.cells() : [ws.active]).forEach((c) => {
+      if (c && c.chart) {
+        if (c.chart.orchestrator) c.chart.orchestrator.volumeOptedOut = true;
+        try {
+          if (c.chart.presentNativeIndicators && c.chart.presentNativeIndicators().includes("volume")) {
+            c.chart.removeIndicator("volume");
+          }
+        } catch (_) {}
+      }
+    });
+  }
+  // Restore chart style (candles, bars, heikin-ashi, etc.)
+  try {
+    const s = localStorage.getItem("tradex_price_style");
+    if (s && ws.active && ws.active.setPriceStyle) ws.active.setPriceStyle(s);
+  } catch (_) {}
+  try {
+    ws.events.on("cell:priceStyle", (e) => {
+      if (e && e.to) {
+        localStorage.setItem("tradex_price_style", e.to);
+        if (LabEmbedded) window.parent.postMessage({ evt: "priceStyle", style: e.to }, location.origin);
+      }
+    });
+  } catch (_) {}
+  // Restore drawings on load immediately and when data settles
+  restoreDrawings(window.LabDefaultSymbol);
+  setTimeout(() => restoreDrawings(window.LabDefaultSymbol), 300);
+  // Auto-save drawings on any change
+  const onDrawChange = () => scheduleSave(window.LabDefaultSymbol);
+  try {
+    ws.chart.on("drawing:created", onDrawChange);
+    ws.chart.on("drawing:edited", onDrawChange);
+    ws.chart.on("drawing:removed", onDrawChange);
+    ws.chart.on("drawing:selected", onDrawChange);
+    ws.events.on("state:changed", onDrawChange);
+    if (ws.chart && ws.chart.drawings && ws.chart.drawings.ctrl) {
+      const ctrl = ws.chart.drawings.ctrl;
+      if (ctrl.events) {
+        ctrl.events.on("drawing:edited", onDrawChange);
+        ctrl.events.on("drawing:created", onDrawChange);
+        ctrl.events.on("drawing:removed", onDrawChange);
+        ctrl.events.on("drawing:defaults", onDrawChange);
+        ctrl.events.on("drawing:settings", onDrawChange);
+      }
+      if (ctrl.store && ctrl.store.onChange) {
+        ctrl.store.onChange(onDrawChange);
+      }
+    }
+    (ws.cells ? ws.cells() : [ws.active]).forEach((c) => {
+      if (c && c.on) {
+        c.on("drawing:edited", onDrawChange);
+        c.on("drawing:created", onDrawChange);
+        c.on("drawing:removed", onDrawChange);
+      }
+      if (c && c.chart && c.chart.drawings && c.chart.drawings.ctrl) {
+        const ctrl = c.chart.drawings.ctrl;
+        if (ctrl.events) {
+          ctrl.events.on("drawing:edited", onDrawChange);
+          ctrl.events.on("drawing:created", onDrawChange);
+          ctrl.events.on("drawing:removed", onDrawChange);
+          ctrl.events.on("drawing:defaults", onDrawChange);
+        }
+        if (ctrl.store && ctrl.store.onChange) {
+          ctrl.store.onChange(onDrawChange);
+        }
+      }
+    });
+  } catch (_) {}
   // Floating favourites bar for starred drawing tools (drawing_favbar.js).
   try { TradeXFavBar.mount(ws, host); } catch (e) { console.warn("favourites bar", e); }
+  try { TradeXDrawingTemplates.mount(ws); } catch (e) { console.warn("drawing templates", e); }
+  try { TradeXStyleFavBar.mount(ws); } catch (e) { console.warn("style favourites bar", e); }
   try { TradeXAutoFit.mount(ws); } catch (e) { console.warn("order-flow auto fit", e); }
   // Colour every chart once its first history is in (the volume indicator mounts with the data).
   setTimeout(applyTheme, 1500);
@@ -166,7 +799,28 @@ function build(layout) {
   // Last run per script (plot values): proof that an indicator really produced numbers (click test, status).
   window.lastRuns = {};
   try { ws.chart.on("script:run", (ev) => { if (ev && ev.id) window.lastRuns[ev.id] = { plots: ev.plots || {}, bar: ev.bar, warnings: (ev.warnings || []).length, at: Date.now() }; }); } catch (_) {}
-  try { ws.chart.on("indicator:removed", (ev) => { if (LabEmbedded && ev && ev.id) window.parent.postMessage({ evt: "ind:removed", id: ev.id }, location.origin); }); } catch (_) {}
+  const onIndRemoved = (ev) => {
+    const id = ev && ev.id;
+    if (id === "volume" || (typeof id === "string" && id.toLowerCase().includes("volume"))) {
+      try { localStorage.setItem("tradex_volume_removed", "1"); } catch (_) {}
+    }
+    if (LabEmbedded && ev && ev.id) window.parent.postMessage({ evt: "ind:removed", id: ev.id }, location.origin);
+  };
+  try {
+    ws.chart.on("indicator:removed", onIndRemoved);
+    (ws.cells ? ws.cells() : [ws.active]).forEach((c) => {
+      if (c && c.chart && c.chart !== ws.chart) c.chart.on("indicator:removed", onIndRemoved);
+    });
+    ws.events.on("cell:created", ({ id }) => {
+      const cell = ws.cell ? ws.cell(id) : null;
+      if (cell && cell.chart) {
+        cell.chart.on("indicator:removed", onIndRemoved);
+        if (localStorage.getItem("tradex_volume_removed") === "1" && cell.chart.orchestrator) {
+          cell.chart.orchestrator.volumeOptedOut = true;
+        }
+      }
+    });
+  } catch (_) {}
   ws.chart.on("market:changed", ({ symbol, timeframe }) => LabNotify(String(symbol || "").replace(/^lab:/, ""), LabTF.fromAny(timeframe || "1")));
 }
 build("");
@@ -198,6 +852,9 @@ window.labChart = {
   natives: async () => (await ws.chart.availableNativeIndicators()).map((n) => ({ type: n.type, title: n.title, supported: n.supported, present: n.present, multi: !!n.multiInstance, beta: !!n.beta })),
   addNative: (type, inputs) => {
     try {
+      if (type === "volume") {
+        try { localStorage.removeItem("tradex_volume_removed"); } catch (_) {}
+      }
       const h = ws.chart.addNativeIndicator(type, inputs ? { inputs } : undefined);
       if (!h || !h.id) return { ok: false, error: "not available on this chart" };
       (window.pineHandles = window.pineHandles || {})[h.id] = h; return { ok: true, id: h.id, title: h.title };
@@ -220,11 +877,43 @@ window.labChart = {
       return res;
     } catch (e) { return { ok: false, error: String(e.message || e) }; }
   },
-  setMarket: (symbol, tf) => (window.LabDefaultSymbol = symbol, window.LabDefaultTF = tf || LabDefaultTF, ws.chart.setMarket({ symbol: "lab:" + symbol, timeframe: VELA_TF[tf] || "1" })),
-  setTF: (t) => ws.chart.setTimeframe ? ws.chart.setTimeframe({ M1: "1", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "1D" }[t]) : null,
+  setMarket: (symbol, tf) => {
+    saveDrawings(window.LabDefaultSymbol);
+    window.LabDefaultSymbol = symbol;
+    window.LabDefaultTF = tf || LabDefaultTF;
+    const r = ws.chart.setMarket({ symbol: "lab:" + symbol, timeframe: VELA_TF[tf] || "1" });
+    setTimeout(() => restoreDrawings(symbol), 400);
+    return r;
+  },
+  setTF: (t) => ws.chart.setTimeframe ? ws.chart.setTimeframe({ M1: "1", M3: "3", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "1D", W1: "1W" }[t]) : null,
+  setPriceStyle: (style) => {
+    if (ws && ws.active && ws.active.setPriceStyle) {
+      ws.active.setPriceStyle(style);
+      localStorage.setItem("tradex_price_style", style);
+    }
+  },
+  getPriceStyle: () => (ws && ws.active && ws.active.priceStyle) || localStorage.getItem("tradex_price_style") || "candles",
   addCodeTrendline,
-  drawingCount: () => { try { return ws.chart.drawings.list().length; } catch (_) { return -1; } },
+  drawingCount: () => { try { return (ws.chart.drawings.all ? ws.chart.drawings.all().length : ws.chart.drawings.toJSON().drawings.length); } catch (_) { return -1; } },
+  saveDrawings,
+  restoreDrawings,
   barCount: () => lastBars.length,
 };
+
+// Remove volume indicator detection from legend click
+document.addEventListener("click", (e) => {
+  const btn = e.target && e.target.closest && e.target.closest("button, [role='button'], .vela-legend-action");
+  if (!btn) return;
+  const row = btn.closest(".vela-legend-item, [data-indicator-id]");
+  if (row) {
+    const rowText = (row.textContent || "").toLowerCase();
+    const action = (btn.getAttribute("data-action") || btn.getAttribute("title") || btn.getAttribute("aria-label") || "").toLowerCase();
+    const isTrash = action.includes("remove") || action.includes("delete") || !!btn.querySelector("svg path[d*='trash'], svg path[d*='M6']");
+    if (rowText.includes("volume") && isTrash) {
+      try { localStorage.setItem("tradex_volume_removed", "1"); } catch (_) {}
+      if (LabEmbedded) window.parent.postMessage({ evt: "ind:removed", id: "volume" }, location.origin);
+    }
+  }
+}, true);
 </script>
 </body></html>

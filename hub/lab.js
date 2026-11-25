@@ -6,8 +6,11 @@ if (LabEmbedded) {
   document.documentElement.classList.add("embed");
   const st = document.createElement("style");
   st.textContent = [
-    "html.embed #top { display: none !important }",                 // Vela / KLineChart title bars
-    "html.embed #top + #chart { top: 0 !important; bottom: 0 !important }",
+    "html.embed #top { display: none !important; border: none !important }",
+    "html.embed #top + #chart { top: 0 !important; bottom: 0 !important; border: none !important }",
+    "html.embed .vela-dtb, html.embed .vela-ws-toolbar { border-right: none !important; border: none !important }",
+    "html.embed .vela-ws-grid, html.embed .vela-workspace { border: none !important; background: transparent !important }",
+    "html.embed .vela-widget-topbar { display: none !important }",   // Vela widget topbar (shell topbar owns controls)
     "html.embed #title, html.embed #sym, html.embed #tfs, html.embed #tfs + .sep, html.embed #auto { display: none !important }", // Lightweight: shell owns these
     "html.embed body { background: var(--bg) !important; color: var(--text) !important; font-family: var(--font) !important }",
     "html.embed #bar { background: var(--panel) !important; border-bottom: 1px solid var(--line) !important; padding: 4px 8px !important }",
@@ -107,12 +110,13 @@ window.LabDefaultSymbol = (LabSymbols.find((s) => s.ticker === "RMT_XAUUSD") || 
 // and the page reports user changes back with LabNotify (only when embedded).
 window.LabParams = new URLSearchParams(location.search);
 if (LabParams.get("symbol") && LabSymbols.some((s) => s.ticker === LabParams.get("symbol"))) window.LabDefaultSymbol = LabParams.get("symbol");
-window.LabDefaultTF = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"].includes(LabParams.get("tf")) ? LabParams.get("tf") : "M1";
+window.LabDefaultTF = ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"].includes(LabParams.get("tf")) ? LabParams.get("tf") : "M1";
 window.LabNotify = (symbol, tf) => { if (LabEmbedded) window.parent.postMessage({ evt: "market", symbol, tf }, location.origin); };
 window.addEventListener("message", (e) => {
   if (e.origin !== location.origin || !e.data || !window.labChart) return;
   if (e.data.cmd === "set" && labChart.setMarket) labChart.setMarket(e.data.symbol, e.data.tf);
   if (e.data.cmd === "layout" && labChart.setLayout) labChart.setLayout(e.data.layout);
+  if (e.data.cmd === "priceStyle" && labChart.setPriceStyle) labChart.setPriceStyle(e.data.style);
   if (e.data.cmd === "pine:add") {
     const reply = (r) => window.parent.postMessage({ evt: "pine", key: e.data.key, ...r }, location.origin);
     if (!labChart.addPine) reply({ ok: false, error: "Pine indicators run on Vela for now (the other engines get them in step 4)." });
@@ -128,9 +132,15 @@ window.addEventListener("message", (e) => {
 });
 
 // Timeframe helpers shared by the pages.
+window.addEventListener("pointerdown", () => {
+  if (window.parent && window.parent !== window) {
+    try { window.parent.postMessage({ evt: "chart:pointerdown" }, location.origin); } catch (_) {}
+  }
+}, true);
+
 window.LabTF = {
-  list: ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
-  sec: { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 },
+  list: ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1", "W1"],
+  sec: { M1: 60, M3: 180, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 },
   // Turn anything like "1", "60", "240", "1D", "1h", "15m" into our code.
   fromAny(v) {
     const s = String(v).trim();
@@ -138,7 +148,7 @@ window.LabTF = {
     if (!m) return "M1";
     const n = parseInt(m[1] || "1", 10), u = m[2].toLowerCase();
     const minutes = u === "h" ? n * 60 : u === "d" ? n * 1440 : u === "w" ? n * 10080 : u === "s" ? 1 : n;
-    const map = { 1: "M1", 5: "M5", 15: "M15", 30: "M30", 60: "H1", 240: "H4", 1440: "D1" };
+    const map = { 1: "M1", 3: "M3", 5: "M5", 15: "M15", 30: "M30", 60: "H1", 240: "H4", 1440: "D1", 10080: "W1" };
     return map[minutes] || "M1";
   },
 };

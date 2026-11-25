@@ -41,7 +41,7 @@ const chart = LC.createChart(host, {
   layout: { background: { color: HubTheme.bg }, textColor: HubTheme.dim, fontFamily: HubTheme.font, panes: { separatorColor: HubTheme.line, separatorHoverColor: HubTheme.accent, enableResize: true } },
   grid: { vertLines: { color: HubTheme.grid }, horzLines: { color: HubTheme.grid } },
   rightPriceScale: { borderColor: HubTheme.line },
-  timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 8 },
+  timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 2 },
   crosshair: { mode: LC.CrosshairMode.Normal },
 });
 
@@ -177,7 +177,24 @@ function applyTheme() {
     grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } }, rightPriceScale: { borderColor: t.line }, timeScale: { borderColor: t.line } });
   makePrice(); paintAll();
 }
-window.labChart = { name: "lightweight", applyTheme, setMarket: (s, t) => { sym = s; tf = t || tf; if (![...symSel.options].some((o) => o.value === s)) symSel.add(new Option(s, s)); symSel.value = s; markTF(); return load(); }, setTF: (t) => { tf = t; markTF(); return load(); }, addCodeTrendline, drawingCount: () => drawings.drawings().length, barCount: () => bars.length };
+window.labChart = {
+  name: "lightweight",
+  applyTheme,
+  setMarket: (s, t) => { sym = s; tf = t || tf; if (![...symSel.options].some((o) => o.value === s)) symSel.add(new Option(s, s)); symSel.value = s; markTF(); return load(); },
+  setTF: (t) => { tf = t; markTF(); return load(); },
+  setPriceStyle: (s) => {
+    if (["candles", "bars", "line", "area"].includes(s)) {
+      style = s;
+      const el = document.getElementById("style");
+      if (el) el.value = s;
+      makePrice();
+      paintAll();
+    }
+  },
+  addCodeTrendline,
+  drawingCount: () => drawings.drawings().length,
+  barCount: () => bars.length
+};
 makePrice(); markTF(); load();
 </script>
 </body></html>

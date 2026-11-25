@@ -24,9 +24,20 @@ window.HubFonts = {
 };
 window.HubThemeKeys = ["bg", "panel", "raised", "line", "grid", "text", "dim", "faint", "accent", "accentInk", "up", "down", "ok", "bad"];
 
-function hexA(hex, a) { // "#rrggbb" + alpha -> rgba()
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+function hexA(color, a) { // "#rrggbb", "#rrggbbaa", "#rgb", or "rgba(...)" + alpha -> rgba()
+  if (!color || typeof color !== "string") return `rgba(0,0,0,${a})`;
+  const s = color.trim();
+  if (s.startsWith("rgb")) {
+    const m = s.match(/[\d.]+/g);
+    if (m && m.length >= 3) return `rgba(${m[0]},${m[1]},${m[2]},${a})`;
+  }
+  let h = s.startsWith("#") ? s.slice(1) : s;
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (h.length >= 6) {
+    const n = parseInt(h.slice(0, 6), 16);
+    if (!Number.isNaN(n)) return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  return `rgba(0,0,0,${a})`;
 }
 window.HubSettingsLoad = () => {
   let s = {};

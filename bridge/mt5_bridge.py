@@ -30,7 +30,7 @@ POLL_S = 0.25          # live read per symbol+timeframe
 POLLER_IDLE_S = 60     # stop a poller nobody asked for
 CALL_TIMEOUT_S = 15    # one terminal call; a stuck call fails instead of freezing the bridge
 SYNC_CAP_S = 6         # how long /bars waits for the terminal to sync an idle symbol
-TF_SEC = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
+TF_SEC = {"M1": 60, "M3": 180, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
 CATEGORY_PATH = {"majors": "Forex", "minors": "Forex", "exotic": "Forex", "crypto": "Crypto", "metals": "Metals",
                  "indices": "Indices", "energies": "Energies", "stocks": "Stocks"}
 STATE = {"offset_s": 0, "offset_src": "default (not yet measured)", "measured_at": 0}

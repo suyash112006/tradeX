@@ -98,6 +98,9 @@ async function addRow(r) {
   if (r.src !== "vela" && r.kind === "library") return flash("Libraries are building blocks for other scripts, not indicators.", true);
   if (r.src === "vela" && st.engine !== "vela") return flash("Switch the engine to Vela to use Vela native indicators.", true);
   if (r.src === "vela") {  // single-instance natives (Volume, VPVR): say so instead of a fake "Added"
+    if (r.type === "volume") {
+      try { localStorage.removeItem("tradex_volume_removed"); } catch (_) {}
+    }
     const live = ((await ask("native:list")).list || []).find((n) => n.type === r.type);
     if (live && live.present && !live.multi) return flash("Already on the chart (one per chart). Use its gear on the chart to change it.", true);
   }
