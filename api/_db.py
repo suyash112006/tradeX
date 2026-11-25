@@ -5,7 +5,7 @@ from pathlib import Path
 
 KV_URL = os.environ.get("KV_REST_API_URL", "").rstrip("/")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN", "")
-PG_URL = os.environ.get("POSTGRES_URL", "")
+PG_URL = os.environ.get("POSTGRES_URL") or os.environ.get("DATABASE_URL", "")
 
 
 def _kv_req(cmd_args):

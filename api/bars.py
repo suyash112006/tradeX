@@ -51,10 +51,12 @@ class handler(BaseHTTPRequestHandler):
                 ]
                 return self._send(200, bars)
 
-            # Default / Binance public REST API
+            # Default / Binance public market data REST API (data-api.binance.vision avoids US 451 geo-block)
             iv = BINANCE_TF.get(tf, "5m")
             sym = symbol.replace("frx", "").replace("USD", "USDT") if symbol.startswith("frx") else symbol
-            u = f"https://api.binance.com/api/v3/klines?symbol={urllib.parse.quote(sym)}&interval={iv}&limit={limit}"
+            if sym == "XAUUSDT":
+                sym = "PAXGUSDT"
+            u = f"https://data-api.binance.vision/api/v3/klines?symbol={urllib.parse.quote(sym)}&interval={iv}&limit={limit}"
             if to_ms:
                 u += f"&endTime={int(to_ms)}"
             rows = fetch_json(u)
