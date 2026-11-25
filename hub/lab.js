@@ -45,6 +45,20 @@ window.LabFeed = (() => {
   // Live candle updates. onBar(bar) gets {time(sec),open,high,low,close,volume}.
   function live(symbol, tf, onBar, source) {
     source = source || window.srcOf(symbol);
+    const host = location.hostname || "localhost";
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      let stopped = false;
+      const poll = async () => {
+        if (stopped) return;
+        try {
+          const r = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&tf=${tf}&limit=2&source=${source}`);
+          const arr = await r.json();
+          if (Array.isArray(arr) && arr.length) onBar(arr[arr.length - 1]);
+        } catch (_) {}
+      };
+      const timer = setInterval(poll, 2500);
+      return () => { stopped = true; clearInterval(timer); };
+    }
     const ws = new WebSocket(wsUrl());
     ws.onopen = () => ws.send(JSON.stringify({ source, symbol, tf }));
     ws.onmessage = (e) => {
